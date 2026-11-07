@@ -1,0 +1,82 @@
+name: Release Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: ctype, curl, dom, fileinfo, filter, hash, mbstring, openssl, pcre, pdo, session, tokenizer, xml
+          coverage: none
+
+      - name: Instalar dependencias (Composer)
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
+
+      - name: Generar clave de aplicación (para pruebas)
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Ejecutar pruebas
+        run: ./vendor/bin/phpunit
+
+  package-release:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: ctype, curl, dom, fileinfo, filter, hash, mbstring, openssl, pcre, pdo, session, tokenizer, xml
+          coverage: none
+
+      - name: Instalar dependencias de producción
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
+
+      - name: Preparar directorio de liberación
+        run: |
+          mkdir -p release
+          rsync -av --exclude='.git' \
+                    --exclude='.env' \
+                    --exclude='node_modules' \
+                    --exclude='tests' \
+                    --exclude='.github' \
+                    --exclude='phpunit.xml' \
+                    --exclude='.env.example' \
+                    ./ ./release/
+          # Conservar .env.example como plantilla
+          cp .env.example release/.env.example
+
+      - name: Obtener versión
+        id: version
+        run: |
+          VERSION=$(git describe --tags --always 2>/dev/null || echo "v0.0.0-$(git rev-parse --short HEAD)")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Crear archivo comprimido
+        run: |
+          cd release
+          tar -czf ../laravel-release-${{ steps.version.outputs.version }}.tar.gz .
+
+      - name: Subir artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: laravel-release-${{ steps.version.outputs.version }}
+          path: laravel-release-*.tar.gz
+          retention-days: 30
