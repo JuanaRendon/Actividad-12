@@ -29,7 +29,7 @@ jobs:
           php artisan key:generate
 
       - name: Ejecutar pruebas
-        run: ./vendor/bin/phpunit
+        run: php artisan test
 
   package-release:
     needs: build-and-test
