@@ -41,3 +41,35 @@ jobs:
         env:
           APP_ENV: testing
         run: php artisan test
+
+              # --- NUEVOS PASOS PARA GENERAR EL ARTEFACTO ---
+      
+      - name: Preparar directorio de liberación
+        run: |
+          mkdir -p release
+          rsync -av --exclude='.git' \
+                    --exclude='.env' \
+                    --exclude='node_modules' \
+                    --exclude='tests' \
+                    --exclude='.github' \
+                    --exclude='phpunit.xml' \
+                    ./ ./release/
+          cp .env.example release/.env.example
+
+      - name: Obtener versión
+        id: version
+        run: |
+          VERSION=$(git describe --tags --always 2>/dev/null || echo "v0.0.0-$(git rev-parse --short HEAD)")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Crear archivo comprimido
+        run: |
+          cd release
+          tar -czf ../laravel-release-${{ steps.version.outputs.version }}.tar.gz .
+
+      - name: Subir artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: laravel-release-${{ steps.version.outputs.version }}
+          path: laravel-release-*.tar.gz
+          retention-days: 30
